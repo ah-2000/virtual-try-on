@@ -1,0 +1,17 @@
+opencv-python
+mediapipe
+numpy<2
+matplotlib
+python-dotenv
+scipy
+pillow
+requests
+ipykernel
+einops
+fashn-human-parser
+onnxruntime
+realesrgan
+basicsr
+fastapi
+uvicorn
+python-multipart

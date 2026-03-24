@@ -1,0 +1,33 @@
+# OS files
+.DS_Store
+
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Node/Next.js artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Logs
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Generated project outputs
+backend/storage/vto_results/
+backend/fashnvton/
+assets/
