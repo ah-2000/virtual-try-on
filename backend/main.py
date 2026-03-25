@@ -35,7 +35,14 @@ jobs: dict = {}  # job_id → {status, step, image_urls, error}
 
 STORAGE_DIR = os.path.join(PROJECT_ROOT, "storage", "vto_results")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+GARMENTS_FILE = os.path.join(DATA_DIR, "garments.json")
 os.makedirs(STORAGE_DIR, exist_ok=True)
+
+# Debug: Log paths on startup
+print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+print(f"DATA_DIR: {DATA_DIR}")
+print(f"GARMENTS_FILE: {GARMENTS_FILE}")
+print(f"GARMENTS_FILE exists: {os.path.exists(GARMENTS_FILE)}")
 
 
 @app.on_event("startup")
@@ -43,11 +50,21 @@ async def startup_event():
     global pipeline, upscaler
     weights_dir = os.path.join(PROJECT_ROOT, "fashnvton", "weights")
     print(f"📦 Loading VTO Pipeline from {weights_dir}...")
-    pipeline = TryOnPipeline(weights_dir=weights_dir, device="cpu")
-    print("✅ Pipeline loaded on CPU")
+    
+    # Detect device availability
+    if torch.cuda.is_available():
+        device = "cuda"
+        device_info = "GPU (CUDA)"
+    else:
+        device = "cpu"
+        device_info = "CPU"
+    
+    print(f"Using device: {device_info}")
+    pipeline = TryOnPipeline(weights_dir=weights_dir, device=device)
+    print(f"✅ Pipeline loaded on {device_info}")
 
     print("✨ Loading Real-ESRGAN Upscaler...")
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch_device = torch.device(device)
     model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
     upscaler = RealESRGANer(
         scale=4,
@@ -57,9 +74,9 @@ async def startup_event():
         tile_pad=10,
         pre_pad=0,
         half=False,
-        device=device
+        device=torch_device
     )
-    print("✅ Real-ESRGAN loaded")
+    print(f"✅ Real-ESRGAN loaded on {device_info}")
 
 
 def _run_tryon_job(job_id: str, person_img: Image.Image, garment_img: Image.Image,
@@ -115,7 +132,7 @@ async def run_tryon(
     person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
     garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
 
-    num_samples = max(1, min(num_samples, 2))  # cap at 2 for CPU safety
+    num_samples = max(1, min(num_samples, 4))  # cap at 4 for GPU processing
 
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "pending", "step": "queued", "image_urls": [], "error": None}
@@ -134,11 +151,17 @@ async def get_job_status(job_id: str):
 
 @app.get("/garments")
 async def get_garments():
-    path = os.path.join(DATA_DIR, "garments.json")
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="garments.json not found")
-    with open(path) as f:
-        return json.load(f)
+    if not os.path.exists(GARMENTS_FILE):
+        print(f"❌ Garments file not found: {GARMENTS_FILE}")
+        raise HTTPException(status_code=404, detail=f"garments.json not found at {GARMENTS_FILE}")
+    try:
+        with open(GARMENTS_FILE) as f:
+            data = json.load(f)
+        print(f"✅ Loaded {len(data)} garments from {GARMENTS_FILE}")
+        return data
+    except Exception as e:
+        print(f"❌ Error loading garments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/results/{filename}")

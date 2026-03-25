@@ -28,8 +28,13 @@ export default function Home() {
   // Fetch garments from backend; fall back to static list if unavailable
   useEffect(() => {
     fetch("http://localhost:8000/garments")
-      .then(r => r.json())
-      .then((data: Garment[]) => setGarments(data))
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setGarments(data);
+      })
       .catch(() => {}); // keep fallback
   }, []);
 
