@@ -1,12 +1,18 @@
 @import "tailwindcss";
 
+@theme inline {
+  --font-inter: var(--font-inter);
+  --font-outfit: var(--font-outfit);
+  --font-cormorant: var(--font-cormorant);
+}
+
 :root {
-  --background: #050505;
-  --foreground: #ffffff;
-  --accent: #7c4dff;
-  --accent-soft: rgba(124, 77, 255, 0.1);
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --background: #f9f8f6;
+  --foreground: #1a1a2e;
+  --accent: #7c3aed;
+  --accent-soft: rgba(124, 58, 237, 0.1);
+  --glass: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.08);
 }
 
 body {
@@ -18,31 +24,38 @@ body {
 
 @layer utilities {
   .glass-card {
-    background: var(--glass);
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 24px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
   .glass-card:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.98);
     border-color: var(--accent);
     transform: translateY(-8px);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 20px 40px rgba(124, 58, 237, 0.12);
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+    background: linear-gradient(135deg, #1a1a2e 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-hero-gradient {
+    background: linear-gradient(135deg, #c2185b 0%, #e91e63 50%, #f06292 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
   .bg-mesh {
-    background-image: 
-      radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-      radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
-      radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+    background-image:
+      radial-gradient(at 0% 0%, hsla(240, 20%, 96%, 1) 0, transparent 50%),
+      radial-gradient(at 50% 0%, hsla(260, 60%, 95%, 1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(300, 40%, 96%, 1) 0, transparent 50%);
     background-attachment: fixed;
   }
 }
@@ -53,11 +66,11 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: #f0efed;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
+  background: #d1d0ce;
   border-radius: 10px;
 }
 

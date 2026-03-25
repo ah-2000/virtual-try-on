@@ -2,23 +2,17 @@
 
 export default function Header() {
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-black/50 backdrop-blur-xl border-b border-white/5">
+        <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-white/80 backdrop-blur-xl border-b border-gray-200">
             <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500" />
-                <span className="font-outfit text-xl font-bold tracking-tighter text-gradient uppercase">
-                    Virtual Try On
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500" />
+                <span className="font-cormorant text-2xl font-semibold tracking-widest uppercase" style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #c2185b 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                    Couture AI
                 </span>
             </div>
-            <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
-                <a href="#" className="hover:text-white transition-colors">Spring / Summer 25</a>
-                <a href="#" className="hover:text-white transition-colors">Exclusives</a>
-                <a href="#" className="hover:text-white transition-colors">About</a>
+            <nav className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                <a href="#studio" className="hover:text-gray-900 transition-colors">Try On</a>
+                <a href="#collection" className="hover:text-gray-900 transition-colors">Collection</a>
             </nav>
-            <div className="flex items-center gap-4">
-                <button className="px-5 py-2 rounded-full border border-white/10 text-sm hover:bg-white/5 transition-colors">
-                    Bespoke
-                </button>
-            </div>
         </header>
     );
 }

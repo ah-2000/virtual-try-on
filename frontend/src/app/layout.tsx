@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import { Inter, Outfit } from "next/font/google";
+import { Inter, Outfit, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  variable: "--font-cormorant",
+  weight: ["300", "400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "Virtual Boutique | Elegance Redefined",
@@ -16,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${outfit.variable} antialiased bg-mesh min-h-screen`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${outfit.variable} ${cormorant.variable} antialiased bg-mesh min-h-screen`} suppressHydrationWarning>
         {children}
       </body>
     </html>

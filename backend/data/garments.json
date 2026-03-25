@@ -1,0 +1,9 @@
+[
+  { "id": "3", "name": "Pastel Silk Summer",  "price": "$420", "image": "/garments/summer.png",      "category": "one-pieces" },
+  { "id": "4", "name": "Lace Cocktail Noir",  "price": "$680", "image": "/garments/cocktail.png",    "category": "one-pieces" },
+  { "id": "5", "name": "Ivory Satin Muse",    "price": "$550", "image": "/garments/new_dress_1.png", "category": "one-pieces" },
+  { "id": "6", "name": "Midnight Aurora",     "price": "$980", "image": "/garments/new_dress_2.png", "category": "one-pieces" },
+  { "id": "7", "name": "Boho Ethereal Midi",  "price": "$320", "image": "/garments/new_dress_3.jpg", "category": "one-pieces" },
+  { "id": "8", "name": "Modern Minimalist",   "price": "$280", "image": "/garments/new_dress_4.png", "category": "tops"       },
+  { "id": "9", "name": "Ethereal Silk Wrap",  "price": "$490", "image": "/garments/garment.webp",    "category": "tops"       }
+]
