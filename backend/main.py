@@ -3,12 +3,24 @@ import sys
 import uuid
 import io
 import json
+import types
 import torch
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
 import numpy as np
+
+# basicsr expects torchvision.transforms.functional_tensor in older releases.
+try:
+    import torchvision.transforms.functional_tensor  # type: ignore # noqa: F401
+except ModuleNotFoundError:
+    import torchvision.transforms.functional as _tvf
+
+    _functional_tensor = types.ModuleType("torchvision.transforms.functional_tensor")
+    _functional_tensor.rgb_to_grayscale = _tvf.rgb_to_grayscale
+    sys.modules["torchvision.transforms.functional_tensor"] = _functional_tensor
+
 from realesrgan import RealESRGANer
 from basicsr.archs.rrdbnet_arch import RRDBNet
 
