@@ -3,6 +3,8 @@ import sys
 import uuid
 import io
 import json
+import random
+import hashlib
 import types
 import torch
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
@@ -43,23 +45,29 @@ app.add_middleware(
 
 pipeline = None
 upscaler = None
-jobs: dict = {}  # job_id → {status, step, image_urls, error}
+face_enhancer = None
+jobs: dict = {}          # job_id → {status, step, image_urls, error}
+result_cache: dict = {}  # cache_key → image_urls  (#7 result caching)
 
 STORAGE_DIR = os.path.join(PROJECT_ROOT, "storage", "vto_results")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 GARMENTS_FILE = os.path.join(DATA_DIR, "garments.json")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-# Debug: Log paths on startup
 print(f"PROJECT_ROOT: {PROJECT_ROOT}")
 print(f"DATA_DIR: {DATA_DIR}")
 print(f"GARMENTS_FILE: {GARMENTS_FILE}")
 print(f"GARMENTS_FILE exists: {os.path.exists(GARMENTS_FILE)}")
 
 
+def _image_hash(img: Image.Image) -> str:
+    """MD5 of pixel data — used as cache key."""
+    return hashlib.md5(img.tobytes()).hexdigest()
+
+
 @app.on_event("startup")
 async def startup_event():
-    global pipeline, upscaler
+    global pipeline, upscaler, face_enhancer
     weights_dir = os.path.join(PROJECT_ROOT, "fashnvton", "weights")
     print(f"📦 Loading VTO Pipeline from {weights_dir}...")
     
@@ -73,6 +81,18 @@ async def startup_event():
     
     print(f"Using device: {device_info}")
     pipeline = TryOnPipeline(weights_dir=weights_dir, device=device)
+
+    # #3 — bfloat16 on CUDA (~2x speed, same quality on Ampere+)
+    if device == "cuda" and torch.cuda.is_bf16_supported():
+        pipeline.model = pipeline.model.to(torch.bfloat16)
+        print("⚡ Model cast to bfloat16")
+
+    # #6 — torch.compile (~25% faster; first inference warm-up will be slow)
+    if device == "cuda" and hasattr(torch, "compile"):
+        print("⚡ Compiling model with torch.compile (first run will be slow)...")
+        pipeline.model = torch.compile(pipeline.model, mode="reduce-overhead")
+        print("✅ Model compiled")
+
     print(f"✅ Pipeline loaded on {device_info}")
 
     print("✨ Loading Real-ESRGAN Upscaler...")
@@ -82,7 +102,7 @@ async def startup_event():
         scale=4,
         model_path=os.path.join(weights_dir, 'RealESRGAN_x4plus.pth'),
         model=model,
-        tile=256,
+        tile=512 if device == "cuda" else 256,  # larger tile = faster on GPU
         tile_pad=10,
         pre_pad=0,
         half=False,
@@ -90,21 +110,54 @@ async def startup_event():
     )
     print(f"✅ Real-ESRGAN loaded on {device_info}")
 
+    # #5 — GFPGAN face enhancer (optional; download GFPGANv1.4.pth to weights/)
+    gfpgan_path = os.path.join(weights_dir, "GFPGANv1.4.pth")
+    if os.path.exists(gfpgan_path):
+        try:
+            from gfpgan import GFPGANer
+            face_enhancer = GFPGANer(
+                model_path=gfpgan_path,
+                upscale=1,
+                arch="clean",
+                channel_multiplier=2,
+                bg_upsampler=None,
+                device=torch_device,
+            )
+            print(f"✅ GFPGAN face enhancer loaded on {device_info}")
+        except Exception as e:
+            print(f"⚠️  GFPGAN failed to load: {e}")
+    else:
+        print(
+            "ℹ️  GFPGANv1.4.pth not found — face enhancement disabled.\n"
+            "   Download: https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth\n"
+            f"   Save to:  {gfpgan_path}"
+        )
 
-def _run_tryon_job(job_id: str, person_img: Image.Image, garment_img: Image.Image,
-                   category: str, num_samples: int):
+
+def _run_tryon_job(
+    job_id: str,
+    person_img: Image.Image,
+    garment_img: Image.Image,
+    category: str,
+    num_samples: int,
+    garment_photo_type: str,  # #4
+    cache_key: tuple,
+):
     """Sync function — runs in BackgroundTasks thread pool."""
     try:
         jobs[job_id]["status"] = "processing"
         jobs[job_id]["step"] = "generating"
-        print(f"🚀 [{job_id[:8]}] category={category} samples={num_samples}")
+        print(f"🚀 [{job_id[:8]}] category={category} photo_type={garment_photo_type} samples={num_samples}")
 
         result = pipeline(
             person_image=person_img,
             garment_image=garment_img,
             category=category,
-            num_timesteps=20,
+            garment_photo_type=garment_photo_type,      # #4 — flat-lay vs model
+            num_timesteps=30,                            # #1 — quality: 20 → 30
+            guidance_scale=2.0,                          # #1 — adherence: 1.5 → 2.0
             num_samples=num_samples,
+            seed=random.randint(0, 2**32 - 1),          # #2 — random seed each run
         )
 
         jobs[job_id]["step"] = "upscaling"
@@ -113,13 +166,32 @@ def _run_tryon_job(job_id: str, person_img: Image.Image, garment_img: Image.Imag
         image_urls = []
         for result_img in result.images:
             img_np = np.array(result_img)
+
+            # Real-ESRGAN upscale
             high_res_np, _ = upscaler.enhance(img_np, outscale=4)
+
+            # #5 — GFPGAN face restoration (expects BGR)
+            if face_enhancer is not None:
+                try:
+                    img_bgr = high_res_np[:, :, ::-1]
+                    _, _, restored_bgr = face_enhancer.enhance(
+                        img_bgr,
+                        has_aligned=False,
+                        only_center_face=False,
+                        paste_back=True,
+                    )
+                    if restored_bgr is not None:
+                        high_res_np = restored_bgr[:, :, ::-1]  # BGR → RGB
+                except Exception as e:
+                    print(f"⚠️  [{job_id[:8]}] GFPGAN face restore failed: {e}")
+
             high_res_img = Image.fromarray(high_res_np)
             filename = f"result_{uuid.uuid4()}.png"
             high_res_img.save(os.path.join(STORAGE_DIR, filename))
             image_urls.append(f"/results/{filename}")
 
         jobs[job_id].update({"status": "done", "step": "done", "image_urls": image_urls})
+        result_cache[cache_key] = image_urls  # #7 — store in cache
         print(f"✅ [{job_id[:8]}] Done — {len(image_urls)} result(s)")
 
     except Exception as e:
@@ -134,22 +206,38 @@ async def run_tryon(
     garment_image: UploadFile = File(...),
     category: str = Form("tops"),
     num_samples: int = Form(1),
+    garment_photo_type: str = Form("model"),  # #4 — "model" or "flat-lay"
 ):
     if pipeline is None:
         raise HTTPException(status_code=503, detail="Model is still loading")
 
-    # Read files before returning (UploadFile is not safe to use after response)
     person_bytes = await person_image.read()
     garment_bytes = await garment_image.read()
     person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
     garment_img = Image.open(io.BytesIO(garment_bytes)).convert("RGB")
 
-    num_samples = max(1, min(num_samples, 4))  # cap at 4 for GPU processing
+    num_samples = max(1, min(num_samples, 4))
+    if garment_photo_type not in ("model", "flat-lay"):
+        garment_photo_type = "model"
+
+    # #7 — cache lookup: skip regeneration for identical inputs
+    cache_key = (_image_hash(person_img), _image_hash(garment_img), category, garment_photo_type, num_samples)
+    if cache_key in result_cache:
+        cached_urls = result_cache[cache_key]
+        if all(os.path.exists(os.path.join(STORAGE_DIR, u.split("/")[-1])) for u in cached_urls):
+            print(f"✅ Cache hit — returning {len(cached_urls)} cached result(s)")
+            job_id = str(uuid.uuid4())
+            jobs[job_id] = {"status": "done", "step": "done", "image_urls": cached_urls, "error": None}
+            return {"job_id": job_id, "status": "done"}
 
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "pending", "step": "queued", "image_urls": [], "error": None}
 
-    background_tasks.add_task(_run_tryon_job, job_id, person_img, garment_img, category, num_samples)
+    background_tasks.add_task(
+        _run_tryon_job,
+        job_id, person_img, garment_img,
+        category, num_samples, garment_photo_type, cache_key,
+    )
 
     return {"job_id": job_id, "status": "pending"}
 
@@ -189,6 +277,8 @@ async def health_check():
     return {
         "status": "ok",
         "model_loaded": pipeline is not None,
+        "face_enhancer": face_enhancer is not None,
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
         "active_jobs": len([j for j in jobs.values() if j["status"] in ("pending", "processing")]),
     }
 

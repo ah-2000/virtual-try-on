@@ -39,6 +39,7 @@ export default function TryOnStudio({ selectedGarment }: TryOnStudioProps) {
     const [garmentMode, setGarmentMode] = useState<GarmentMode>("gallery");
     const [customGarmentImage, setCustomGarmentImage] = useState<string | null>(null);
     const [customCategory, setCustomCategory] = useState<GarmentCategory>("one-pieces");
+    const [garmentPhotoType, setGarmentPhotoType] = useState<"model" | "flat-lay">("model");
 
     // Capture garment name at job-start time to avoid stale closure in polling
     const garmentNameRef = useRef("Custom Garment");
@@ -121,6 +122,7 @@ export default function TryOnStudio({ selectedGarment }: TryOnStudioProps) {
             formData.append("garment_image", garmentBlob, "garment.jpg");
             formData.append("category", activeGarment.category);
             formData.append("num_samples", String(numSamples));
+            formData.append("garment_photo_type", garmentPhotoType);
 
             const { data } = await axios.post(`${API}/tryon`, formData);
             setJobId(data.job_id);
@@ -237,6 +239,15 @@ export default function TryOnStudio({ selectedGarment }: TryOnStudioProps) {
                             ))}
                         </div>
                     )}
+
+                    {/* Photo type toggle — shown always so gallery users can hint flat-lay */}
+                    <div className="w-full flex rounded-full bg-gray-100 p-1 gap-1">
+                        {(["model", "flat-lay"] as const).map(type => (
+                            <button key={type} onClick={() => setGarmentPhotoType(type)} className={`flex-1 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${garmentPhotoType === type ? "bg-white text-rose-500 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
+                                {type === "model" ? "Worn Photo" : "Flat-Lay"}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
