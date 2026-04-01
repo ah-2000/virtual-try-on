@@ -30,4 +30,5 @@ frontend/out/
 # Generated project outputs
 backend/storage/vto_results/
 backend/fashnvton/
-assets/
+backend/data/Men/
+backend/data/Women/
