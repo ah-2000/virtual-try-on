@@ -186,38 +186,15 @@ async def startup_event():
     print(f"Using device: {device_info}")
 
     # ---------------------------------------------------------------
-    # 1. Try IDM-VTON first (higher quality), fallback to FASHN VTON
+    # 1. Load IDM-VTON pipeline
     # ---------------------------------------------------------------
-    idm_loaded = False
-    if idm_local.is_available():
-        try:
-            print("[LOAD] Loading IDM-VTON as primary pipeline...")
-            idm_local.load(device=device)
-            pipeline = IDMVTONWrapper(device=device)
-            pipeline_type = "IDM-VTON"
-            idm_loaded = True
-            print(f"[OK] IDM-VTON loaded on {device_info}")
-        except Exception as e:
-            import traceback
-            print(f"[WARN] IDM-VTON load failed: {e}")
-            traceback.print_exc()
-
-    if not idm_loaded:
-        from fashn_vton.pipeline import TryOnPipeline
-        print(f"[LOAD] Loading FASHN VTON (fallback) from {weights_dir}...")
-        pipeline = TryOnPipeline(weights_dir=weights_dir, device=device)
-        pipeline_type = "FASHN"
-
-        # bfloat16 + torch.compile for FASHN only
-        if device == "cuda" and torch.cuda.is_bf16_supported():
-            pipeline.tryon_model = pipeline.tryon_model.to(torch.bfloat16)
-            print("[FAST] Model cast to bfloat16")
-        if device == "cuda" and hasattr(torch, "compile"):
-            print("[FAST] Compiling model with torch.compile (first run will be slow)...")
-            pipeline.tryon_model = torch.compile(pipeline.tryon_model, mode="reduce-overhead")
-            print("[OK] Model compiled")
-
-        print(f"[OK] FASHN VTON loaded on {device_info}")
+    if not idm_local.is_available():
+        raise RuntimeError("IDM-VTON not available. Run setup_idm_local.py first.")
+    print("[LOAD] Loading IDM-VTON pipeline...")
+    idm_local.load(device=device)
+    pipeline = IDMVTONWrapper(device=device)
+    pipeline_type = "IDM-VTON"
+    print(f"[OK] IDM-VTON loaded on {device_info}")
 
     # ---------------------------------------------------------------
     # 2. Real-ESRGAN upscaler
