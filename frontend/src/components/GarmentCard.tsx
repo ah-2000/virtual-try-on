@@ -16,8 +16,8 @@ export default function GarmentCard({ id, name, price, image, isSelected, onSele
     return (
         <div
             onClick={() => onSelect(id)}
-            className={`glass-card p-4 cursor-pointer relative overflow-hidden group ${isSelected ? "ring-2 ring-rose-400 bg-rose-50/30" : ""
-                }`}
+            className={`glass-card p-4 cursor-pointer relative overflow-hidden group ${isSelected ? "ring-2 ring-rose-400" : ""}`}
+            style={isSelected ? { background: "var(--accent-soft)" } : {}}
         >
             <div className="aspect-[3/4] relative rounded-xl overflow-hidden mb-4">
                 <Image
@@ -32,10 +32,10 @@ export default function GarmentCard({ id, name, price, image, isSelected, onSele
             </div>
             <div className="flex justify-between items-start">
                 <div>
-                    <h3 className="font-outfit text-sm font-semibold text-gray-800">{name}</h3>
-                    <p className="text-xs text-gray-400 mt-1 uppercase">Spring Collection</p>
+                    <h3 className="font-outfit text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{name}</h3>
+                    <p className="text-xs mt-1 uppercase" style={{ color: "var(--text-tertiary)" }}>Spring Collection</p>
                 </div>
-                <span className="text-sm font-bold text-violet-600 font-outfit">{price}</span>
+                <span className="text-sm font-bold font-outfit" style={{ color: "var(--accent)" }}>{price}</span>
             </div>
             {isSelected && (
                 <div className="absolute top-4 right-4 w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">

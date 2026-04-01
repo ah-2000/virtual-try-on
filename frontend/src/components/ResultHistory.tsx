@@ -26,7 +26,20 @@ export default function ResultHistory() {
     const [preview, setPreview] = useState<string | null>(null);
 
     useEffect(() => {
-        setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"));
+        const saved: HistoryEntry[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+        Promise.all(
+            saved.map(entry =>
+                fetch(entry.imageUrl, { method: "HEAD" })
+                    .then(r => (r.ok ? entry : null))
+                    .catch(() => null)
+            )
+        ).then(results => {
+            const valid = results.filter(Boolean) as HistoryEntry[];
+            if (valid.length !== saved.length) {
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(valid));
+            }
+            setHistory(valid);
+        });
     }, []);
 
     const clearAll = () => {
@@ -47,12 +60,13 @@ export default function ResultHistory() {
             <section className="mb-24">
                 <div className="flex justify-between items-end mb-8">
                     <div>
-                        <h2 className="font-outfit text-2xl font-bold text-gray-800 uppercase tracking-wider">Past Looks</h2>
+                        <h2 className="font-outfit text-2xl font-bold uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>Past Looks</h2>
                         <div className="w-12 h-1 bg-rose-400 mt-2" />
                     </div>
                     <button
                         onClick={clearAll}
-                        className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest text-gray-400 hover:text-red-400 transition-colors"
+                        className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-widest hover:text-red-400 transition-colors"
+                        style={{ color: "var(--text-tertiary)" }}
                     >
                         <Trash2 className="w-3 h-3" />
                         Clear All
@@ -66,7 +80,7 @@ export default function ResultHistory() {
                             className="relative group cursor-pointer"
                             onClick={() => setPreview(entry.imageUrl)}
                         >
-                            <div className="aspect-[3/4] rounded-2xl overflow-hidden bg-gray-100">
+                            <div className="aspect-[3/4] rounded-2xl overflow-hidden" style={{ background: "var(--surface-secondary)" }}>
                                 <img
                                     src={entry.imageUrl}
                                     alt={entry.garmentName}
@@ -75,14 +89,15 @@ export default function ResultHistory() {
                             </div>
                             <button
                                 onClick={e => { e.stopPropagation(); removeOne(entry.id); }}
-                                className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
+                                className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                style={{ background: "var(--glass)" }}
                             >
-                                <X className="w-3 h-3 text-gray-500" />
+                                <X className="w-3 h-3" style={{ color: "var(--text-secondary)" }} />
                             </button>
-                            <p className="text-[9px] font-semibold text-gray-500 mt-2 uppercase tracking-wider truncate">
+                            <p className="text-[9px] font-semibold mt-2 uppercase tracking-wider truncate" style={{ color: "var(--text-secondary)" }}>
                                 {entry.garmentName}
                             </p>
-                            <p className="text-[9px] text-gray-300 uppercase tracking-wider">
+                            <p className="text-[9px] uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>
                                 {new Date(entry.timestamp).toLocaleDateString()}
                             </p>
                         </div>
@@ -100,9 +115,10 @@ export default function ResultHistory() {
                         <img src={preview} className="w-full rounded-3xl shadow-2xl" />
                         <button
                             onClick={() => setPreview(null)}
-                            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-lg hover:bg-gray-50"
+                            className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
+                            style={{ background: "var(--surface)" }}
                         >
-                            <X className="w-5 h-5 text-gray-600" />
+                            <X className="w-5 h-5" style={{ color: "var(--text-secondary)" }} />
                         </button>
                     </div>
                 </div>

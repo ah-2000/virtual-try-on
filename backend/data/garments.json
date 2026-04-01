@@ -5,5 +5,11 @@
   { "id": "6", "name": "Midnight Aurora",     "price": "$980", "image": "/garments/new_dress_2.png", "category": "one-pieces" },
   { "id": "7", "name": "Boho Ethereal Midi",  "price": "$320", "image": "/garments/new_dress_3.jpg", "category": "one-pieces" },
   { "id": "8", "name": "Modern Minimalist",   "price": "$280", "image": "/garments/new_dress_4.png", "category": "tops"       },
-  { "id": "9", "name": "Ethereal Silk Wrap",  "price": "$490", "image": "/garments/garment.webp",    "category": "tops"       }
+  { "id": "9", "name": "Ethereal Silk Wrap",  "price": "$490", "image": "/garments/garment.webp",    "category": "tops"       },
+  { "id": "10", "name": "Chic Ruffled Blouse", "price": "$360", "image": "/garments/1.png",   "category": "tops"       },
+  { "id": "11", "name": "Sleek Satin Camisole", "price": "$220", "image": "/garments/3.png",   "category": "tops"       },
+  { "id": "12", "name": "Bohemian Lace Crop",  "price": "$300", "image": "/garments/4.png",   "category": "tops"       },
+  { "id": "13", "name": "Chic Ruffled Blouse", "price": "$360", "image": "/garments/5.png",   "category": "tops"       },
+  { "id": "14", "name": "Sleek Satin Camisole", "price": "$220", "image": "/garments/6.png",   "category": "tops"       },
+  { "id": "15", "name": "Bohemian Lace Crop",  "price": "$300", "image": "/garments/7.png",   "category": "tops"       }
 ]
