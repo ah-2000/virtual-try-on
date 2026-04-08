@@ -48,6 +48,7 @@ FASHN_SRC_PATH = os.path.join(PROJECT_ROOT, "fashnvton", "src")
 sys.path.append(FASHN_SRC_PATH)
 
 import idm_local_pipeline as idm_local
+import fashn15_pipeline as fashn_local
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -135,6 +136,54 @@ class IDMVTONWrapper:
         return None  # IDM-VTON uses SCHP, not FashnHumanParser
 
 
+class FASHNWrapper:
+    """Wraps FASHN VTON v1.5 to present the same interface."""
+
+    is_idm = False
+
+    def __init__(self, device: str = "cuda"):
+        self._device = device
+        self.sam_predictor = None
+
+    def __call__(
+        self,
+        person_image: Image.Image,
+        garment_image: Image.Image,
+        category: str = "tops",
+        garment_photo_type: str = "model",
+        num_timesteps: int = 25,
+        guidance_scale: float = 1.5,
+        num_samples: int = 1,
+        seed: int = 0,
+        **kwargs,
+    ) -> PipelineOutput:
+        images = fashn_local.run_tryon(
+            person_img=person_image,
+            garment_img=garment_image,
+            category=category,
+            garment_photo_type=garment_photo_type,
+            num_samples=num_samples,
+            num_timesteps=num_timesteps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+        )
+        return PipelineOutput(images=images)
+
+    def pose_model(self, img_bgr: np.ndarray) -> dict:
+        """Use FASHN's built-in DWPose for pose validation."""
+        pipe = fashn_local.get_pipeline()
+        if pipe is None:
+            return {"bodies": {"candidate": np.zeros((18, 2)), "subset": np.full((1, 18), -1)}}
+        pil_img = Image.fromarray(img_bgr[:, :, ::-1])
+        result = pipe.pose_model(pil_img)
+        return result
+
+    @property
+    def hp_model(self):
+        pipe = fashn_local.get_pipeline()
+        return pipe.hp_model if pipe else None
+
+
 app = FastAPI(title="Couture AI API")
 
 # Manual CORS middleware
@@ -186,69 +235,35 @@ async def startup_event():
     print(f"Using device: {device_info}")
 
     # ---------------------------------------------------------------
-    # 1. Load IDM-VTON pipeline
+    # 1. Load model: OOTDiffusion (primary) → IDM-VTON (fallback)
     # ---------------------------------------------------------------
-    if not idm_local.is_available():
-        raise RuntimeError("IDM-VTON not available. Run setup_idm_local.py first.")
-    print("[LOAD] Loading IDM-VTON pipeline...")
-    idm_local.load(device=device)
-    pipeline = IDMVTONWrapper(device=device)
-    pipeline_type = "IDM-VTON"
-    print(f"[OK] IDM-VTON loaded on {device_info}")
-
+    # Try FASHN VTON v1.5 (primary) → IDM-VTON (fallback)
     # ---------------------------------------------------------------
-    # 2. Real-ESRGAN upscaler
-    # ---------------------------------------------------------------
-    print("[LOAD] Loading Real-ESRGAN Upscaler...")
-    torch_device = torch.device(device)
-    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-    upscaler = RealESRGANer(
-        scale=4,
-        model_path=os.path.join(weights_dir, 'RealESRGAN_x4plus.pth'),
-        model=model,
-        tile=512 if device == "cuda" else 256,
-        tile_pad=10, pre_pad=0, half=False, device=torch_device
-    )
-    print(f"[OK] Real-ESRGAN loaded on {device_info}")
-
-    # ---------------------------------------------------------------
-    # 3. Face enhancement (CodeFormer preferred, GFPGAN fallback)
-    # ---------------------------------------------------------------
-    codeformer_path = os.path.join(weights_dir, "codeformer.pth")
-    gfpgan_path = os.path.join(weights_dir, "GFPGANv1.4.pth")
-
-    if os.path.exists(codeformer_path):
+    if fashn_local.is_available():
         try:
-            from codeformer import CodeFormer as _CF
-            face_enhancer = _CF(model_path=codeformer_path, upscale=1, device=torch_device)
-            print(f"[OK] CodeFormer loaded on {device_info}")
+            print("[LOAD] Loading FASHN VTON v1.5 (primary)...")
+            fashn_local.load(device=device)
+            pipeline = FASHNWrapper(device=device)
+            pipeline_type = "FASHN-VTON"
+            print(f"[OK] FASHN VTON v1.5 loaded on {device_info}")
         except Exception as e:
-            print(f"[WARN] CodeFormer failed: {e}")
-            if os.path.exists(gfpgan_path):
-                try:
-                    from gfpgan import GFPGANer
-                    face_enhancer = GFPGANer(
-                        model_path=gfpgan_path, upscale=1, arch="clean",
-                        channel_multiplier=2, bg_upsampler=None, device=torch_device,
-                    )
-                    print(f"[OK] GFPGAN loaded (CodeFormer fallback) on {device_info}")
-                except Exception as e2:
-                    print(f"[WARN] GFPGAN also failed: {e2}")
-    elif os.path.exists(gfpgan_path):
-        try:
-            from gfpgan import GFPGANer
-            face_enhancer = GFPGANer(
-                model_path=gfpgan_path, upscale=1, arch="clean",
-                channel_multiplier=2, bg_upsampler=None, device=torch_device,
-            )
-            print(f"[OK] GFPGAN loaded on {device_info}")
-        except Exception as e:
-            print(f"[WARN] GFPGAN failed: {e}")
+            print(f"[WARN] FASHN VTON failed: {e}")
+            print("[LOAD] Falling back to IDM-VTON...")
+            if idm_local.is_available():
+                idm_local.load(device=device)
+                pipeline = IDMVTONWrapper(device=device)
+                pipeline_type = "IDM-VTON"
+                print(f"[OK] IDM-VTON loaded on {device_info} (fallback)")
+            else:
+                raise RuntimeError("No model available. Run setup scripts first.")
+    elif idm_local.is_available():
+        print("[LOAD] FASHN VTON not available, loading IDM-VTON (fallback)...")
+        idm_local.load(device=device)
+        pipeline = IDMVTONWrapper(device=device)
+        pipeline_type = "IDM-VTON"
+        print(f"[OK] IDM-VTON loaded on {device_info} (fallback)")
     else:
-        print(
-            "[INFO] No face enhancer weights found.\n"
-            f"   Save codeformer.pth or GFPGANv1.4.pth to: {weights_dir}"
-        )
+        raise RuntimeError("No model available. Run setup scripts first.")
 
     # ---------------------------------------------------------------
     # 4. SAM2 mask refinement (optional)
@@ -279,11 +294,11 @@ async def startup_event():
         hp_postprocess = pipeline.hp_model
         print("[OK] Post-processing parser: reusing pipeline.hp_model")
     else:
-        # IDM-VTON uses SCHP — load FashnHumanParser separately for post-processing
+        # IDM-VTON uses SCHP — load FashnHumanParser on CPU to save VRAM
         try:
             from fashn_human_parser import FashnHumanParser
-            hp_postprocess = FashnHumanParser(device=device)
-            print(f"[OK] FashnHumanParser loaded separately for post-processing on {device_info}")
+            hp_postprocess = FashnHumanParser(device="cpu")
+            print(f"[OK] FashnHumanParser loaded on CPU (saves VRAM)")
         except Exception as e:
             print(f"[WARN] FashnHumanParser failed: {e} — post-processing disabled")
 
@@ -303,8 +318,8 @@ def _get_rembg_session():
     global _rembg_session
     if _rembg_session is None and _has_rembg:
         from rembg import new_session
-        _rembg_session = new_session("birefnet-general")
-        print("[OK] BiRefNet-general session created")
+        _rembg_session = new_session("u2net")
+        print("[OK] u2net rembg session created")
     return _rembg_session
 
 
@@ -341,67 +356,113 @@ def _sharpen_output(img: Image.Image) -> Image.Image:
     return img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=80, threshold=3))
 
 
-def _apply_bg_color(img: Image.Image, bg_color=_BG_COLOR, threshold=240) -> Image.Image:
+def _apply_bg_color(img: Image.Image, bg_color=_BG_COLOR, threshold=230) -> Image.Image:
     """Replace all near-white pixels with the exact #F1EFEF background color.
 
     Any pixel where R, G, B are ALL above `threshold` is considered background
-    and gets replaced with the target color. This ensures the exact background
-    color regardless of what rembg or the diffusion model outputs.
+    and gets replaced with the target color. Threshold lowered to 230 to catch
+    more off-white background pixels from rembg output.
     """
     img_np = np.array(img)
-    # Mask: all channels above threshold = background pixel
     bg_mask = np.all(img_np >= threshold, axis=-1)
     img_np[bg_mask] = bg_color
     return Image.fromarray(img_np)
 
 
 def _preserve_face(person_img: Image.Image, result_img: Image.Image) -> Image.Image:
-    """Blend original face + hair from the bg-removed person image into the result.
+    """Blend original face + hair from the person image into the result.
 
-    Uses the RESULT's parse map to find face (1) and hair (2) regions.
-    Since person_img is already bg-removed (white background, no hoodie collar
-    visible after IDM-VTON mask expansion), it's safe to include hair.
-    Erodes the mask slightly to avoid edge artifacts, then feathers for smooth blend.
+    Phase 3: Uses FashnHumanParser to find face (1) and hair (2) in both
+    the original person and the result. Blends the original face/hair back
+    to prevent distortion from the diffusion model.
     """
     if hp_postprocess is None:
         return result_img
     try:
         from scipy.ndimage import gaussian_filter, binary_erosion
 
-        # Parse the RESULT image to find face + hair locations
-        result_pil_384 = result_img.resize((384, 512), Image.LANCZOS)
-        result_parse = hp_postprocess(result_pil_384)
-        if hasattr(result_parse, 'cpu'):
-            result_parse = result_parse.cpu().numpy()
-        else:
-            result_parse = np.array(result_parse)
-        result_parse_full = np.array(
-            Image.fromarray(result_parse.astype(np.uint8)).resize(result_img.size, Image.NEAREST)
-        )
+        # Resize person to match result
+        person_resized = person_img.resize(result_img.size, Image.LANCZOS)
+
+        # Parse the RESULT image to find where face+hair are in the output
+        result_np = np.array(result_img)
+        result_parse = hp_postprocess.predict(result_np)
 
         # Face=1, Hair=2 in FashnHumanParser
-        face_hair_mask = np.isin(result_parse_full, [1, 2])
+        face_hair_mask = np.isin(result_parse, [1, 2])
         if not face_hair_mask.any():
             return result_img
 
-        # Erode slightly to stay inside the safe region
-        face_hair_mask = binary_erosion(face_hair_mask, iterations=3)
-        if not face_hair_mask.any():
+        # Also parse person to get the ORIGINAL face region
+        person_np = np.array(person_resized)
+        person_parse = hp_postprocess.predict(person_np)
+        person_face_mask = np.isin(person_parse, [1, 2])
+
+        # Use intersection — only blend where both agree there's a face
+        # This prevents blending background/clothing as "face"
+        combined_mask = face_hair_mask | person_face_mask
+        if not combined_mask.any():
             return result_img
 
-        # Feather edges for smooth blending
-        mask_float = face_hair_mask.astype(np.float32)
-        mask_float = gaussian_filter(mask_float, sigma=4)
+        # Erode to stay safely inside face region
+        combined_mask = binary_erosion(combined_mask, iterations=4)
+        if not combined_mask.any():
+            return result_img
+
+        # Feather edges for smooth blending (larger sigma = smoother transition)
+        mask_float = combined_mask.astype(np.float32)
+        mask_float = gaussian_filter(mask_float, sigma=5)
         mask_3d = np.stack([mask_float] * 3, axis=-1)
 
-        person_resized = person_img.resize(result_img.size, Image.LANCZOS)
-        result_np = np.array(result_img)
-        person_np = np.array(person_resized)
-
+        # Blend: original face over result
         blended = person_np.astype(np.float64) * mask_3d + result_np.astype(np.float64) * (1 - mask_3d)
         return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
     except Exception as e:
         print(f"[WARN] Face preservation failed: {e}")
+        return result_img
+
+
+def _preserve_feet(person_img: Image.Image, result_img: Image.Image) -> Image.Image:
+    """Blend original feet/shoes from person into result.
+
+    Fix 3: When a long dress is applied, model generates weird legs/pants
+    under the garment. This blends the original person's feet area back
+    to keep natural shoes/feet appearance.
+    """
+    if hp_postprocess is None:
+        return result_img
+    try:
+        from scipy.ndimage import gaussian_filter, binary_dilation
+
+        person_resized = person_img.resize(result_img.size, Image.LANCZOS)
+        person_np = np.array(person_resized)
+        result_np = np.array(result_img)
+
+        # Parse result to find feet (15) in FashnHumanParser
+        result_parse = hp_postprocess.predict(result_np)
+        person_parse = hp_postprocess.predict(person_np)
+
+        # Feet=15 in FashnHumanParser
+        person_feet = person_parse == 15
+        result_feet = result_parse == 15
+
+        # Use person's original feet region
+        feet_mask = person_feet | result_feet
+        if not feet_mask.any():
+            return result_img
+
+        # Dilate slightly to include shoes edges
+        feet_mask = binary_dilation(feet_mask, iterations=3)
+
+        # Feather for smooth blend
+        mask_float = feet_mask.astype(np.float32)
+        mask_float = gaussian_filter(mask_float, sigma=3)
+        mask_3d = np.stack([mask_float] * 3, axis=-1)
+
+        blended = person_np.astype(np.float64) * mask_3d + result_np.astype(np.float64) * (1 - mask_3d)
+        return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
+    except Exception as e:
+        print(f"[WARN] Feet preservation failed: {e}")
         return result_img
 
 
@@ -591,14 +652,19 @@ def _run_tryon_job(
     garment_photo_type: str,
 ):
     try:
+        import time as _time
         jobs[job_id]["status"] = "processing"
+        _t0 = _time.time()
 
         # Step 1: Remove background (5%)
         _update_job(job_id, "removing_background", 5)
+        _ts = _time.time()
         person_img = _remove_background(person_img)
+        print(f"[TIMER] [{job_id[:8]}] bg_removal: {_time.time()-_ts:.1f}s")
 
-        # Step 2: Detecting pose (15%)
+        # Step 2: Detecting pose + ensure portrait orientation (15%)
         _update_job(job_id, "detecting_pose", 15)
+        _ts = _time.time()
         pose_warning = None
         pose_confidence = 1.0
         try:
@@ -609,10 +675,25 @@ def _run_tryon_job(
             if not validation["pose_valid"]:
                 pose_warning = validation["warning"]
             if pose_confidence >= 0.3:
-                person_img = auto_crop_person(person_img, pose_result)
+                # Use 2:3 ratio for FASHN, 3:4 for IDM-VTON
+                target_ratio = 2/3 if pipeline_type == "FASHN-VTON" else 3/4
+                person_img = auto_crop_person(person_img, pose_result,
+                                              margin=0.20, target_ratio=target_ratio)
         except Exception as e:
             print(f"[WARN] Pose validation failed: {e}")
+
+        # Ensure portrait orientation even if pose failed
+        w, h = person_img.size
+        if w > h:
+            # Landscape image — pad to portrait to prevent head cut
+            new_h = int(w / (2/3))  # 2:3 ratio
+            bg = Image.new("RGB", (w, new_h), _BG_COLOR)
+            bg.paste(person_img, (0, (new_h - h) // 2))
+            person_img = bg
+            print(f"[FIX] Landscape→portrait padded: {w}x{h} → {w}x{new_h}")
+
         jobs[job_id].update({"pose_confidence": pose_confidence, "pose_warning": pose_warning})
+        print(f"[TIMER] [{job_id[:8]}] pose_detect: {_time.time()-_ts:.1f}s")
 
         # Step 3: Parsing body (20%)
         _update_job(job_id, "parsing_body", 20)
@@ -628,50 +709,48 @@ def _run_tryon_job(
                 _update_job(job_id, "done", 100, status="done", image_urls=cached_urls)
                 return
 
+        _ts = _time.time()
         result = pipeline(
             person_image=person_img,
             garment_image=garment_img,
             category=category,
             garment_photo_type=garment_photo_type,
-            num_timesteps=40 if pipeline_type == "IDM-VTON" else 25,
-            guidance_scale=2.5 if pipeline_type == "IDM-VTON" else 1.5,
+            num_timesteps=30 if pipeline_type == "FASHN-VTON" else 25,
+            guidance_scale=2.0 if pipeline_type == "FASHN-VTON" else 2.5,
             num_samples=num_samples,
             seed=random.randint(0, 2**32 - 1),
         )
+        print(f"[TIMER] [{job_id[:8]}] diffusion: {_time.time()-_ts:.1f}s")
 
         _update_job(job_id, "fitting_garment", 70)
 
         image_urls = []
         for idx, result_img in enumerate(result.images):
-            # Step 5: Preserving face (75%)
+            # Step 5: Preserving face + feet (75%)
             _update_job(job_id, "preserving_face", 75)
+            _ts = _time.time()
             result_img = _preserve_face(person_img, result_img)
+            result_img = _preserve_feet(person_img, result_img)
+            print(f"[TIMER] [{job_id[:8]}] face_feet_preserve: {_time.time()-_ts:.1f}s")
 
-            # Step 6: Cleaning background (80%)
+            # Step 6: Clean background — remove distorted bg, replace with #F1EFEF (80%)
             _update_job(job_id, "cleaning_background", 80)
+            _ts = _time.time()
             result_img = _remove_background(result_img)
+            print(f"[TIMER] [{job_id[:8]}] bg_cleanup: {_time.time()-_ts:.1f}s")
 
             # Step 7: Sharpening (85%)
             _update_job(job_id, "sharpening", 85)
             result_img = _sharpen_output(result_img)
 
-            img_np = np.array(result_img)
-
-            # Step 8: Upscaling (88%)
-            _update_job(job_id, "upscaling", 88)
-            high_res_np, _ = upscaler.enhance(img_np, outscale=2)
-
-            # Step 9: Face restoration (93%)
-            _update_job(job_id, "restoring_face", 93)
-            high_res_np = _enhance_face(high_res_np, job_id[:8])
-
-            # Step 10: Apply exact #F1EFEF background + save (97%)
-            _update_job(job_id, "saving_result", 97)
-            high_res_img = Image.fromarray(high_res_np)
-            high_res_img = _apply_bg_color(high_res_img)
+            # Step 8: Force exact #F1EFEF on any remaining near-white pixels (90%)
+            _update_job(job_id, "saving_result", 90)
+            result_img = _apply_bg_color(result_img)
             filename = f"result_{uuid.uuid4()}.png"
-            high_res_img.save(os.path.join(STORAGE_DIR, filename))
+            result_img.save(os.path.join(STORAGE_DIR, filename))
             image_urls.append(f"/results/{filename}")
+
+        print(f"[TIMER] [{job_id[:8]}] TOTAL: {_time.time()-_t0:.1f}s")
 
         _update_job(job_id, "done", 100, status="done", image_urls=image_urls)
         result_cache[cache_key] = image_urls
@@ -747,19 +826,74 @@ async def get_result(filename: str):
     return FileResponse(file_path)
 
 
-@app.get("/health")
-async def health_check():
+
+
+async def _check_data_storage() -> dict:
+    """Check that data directory and garments file are accessible."""
+    try:
+        if not os.path.isdir(DATA_DIR):
+            return {"status": "fail", "detail": f"Data directory missing: {DATA_DIR}"}
+        if not os.path.isfile(GARMENTS_FILE):
+            return {"status": "fail", "detail": f"Garments file missing: {GARMENTS_FILE}"}
+        with open(GARMENTS_FILE, "r") as f:
+            json.load(f)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "fail", "detail": str(e)}
+
+
+async def _check_storage_dir() -> dict:
+    """Check that the results storage directory is writable."""
+    try:
+        if not os.path.isdir(STORAGE_DIR):
+            return {"status": "fail", "detail": f"Storage directory missing: {STORAGE_DIR}"}
+        test_file = os.path.join(STORAGE_DIR, ".healthcheck")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        os.remove(test_file)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "fail", "detail": str(e)}
+
+
+# Register health checks here — add new (name, callable) pairs to extend.
+_health_checks: list[tuple[str, callable]] = [
+    ("data_storage", _check_data_storage),
+    ("results_storage", _check_storage_dir),
+]
+
+
+async def _run_health_checks() -> dict:
+    checks = {}
+    all_ok = True
+    for name, check_fn in _health_checks:
+        result = await check_fn()
+        checks[name] = result
+        if result["status"] != "ok":
+            all_ok = False
+
     return {
-        "status": "ok",
+        "status": "healthy" if all_ok else "degraded",
         "pipeline": pipeline_type,
         "model_loaded": pipeline is not None,
         "face_enhancer": face_enhancer is not None,
         "sam2_refiner": sam_predictor is not None,
         "color_harmonizer": hp_postprocess is not None,
-        "lighting_harmonizer": True,  # always available (LAB-based, no model needed)
+        "lighting_harmonizer": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "active_jobs": len([j for j in jobs.values() if j["status"] in ("pending", "processing")]),
+        "checks": checks,
     }
+
+
+@app.get("/")
+async def root():
+    return await _run_health_checks()
+
+
+@app.get("/health")
+async def health_check():
+    return await _run_health_checks()
 
 
 if __name__ == "__main__":

@@ -134,12 +134,12 @@ def load(device: str = "cuda") -> None:
     )
     _pipe.unet_encoder = unet_encoder
 
-    gpu_id = 0 if device == "cuda" else -1
-    _parsing  = Parsing(gpu_id)
-    _openpose = OpenPose(gpu_id)
+    # Preprocessing on CPU
+    _parsing  = Parsing(-1)   # CPU
+    _openpose = OpenPose(-1)  # CPU
 
     _device = device
-    print(f"[IDM-LOCAL] Pipeline ready (inference runs on {device})")
+    print(f"[IDM-LOCAL] Pipeline ready (inference on {device})")
 
 
 def get_openpose():
@@ -185,7 +185,7 @@ def _get_densepose_image(human_img_np: np.ndarray) -> Image.Image:
             "./ckpt/densepose/model_final_162be9.pkl",
             "dp_segm",
             "-v",
-            "--opts", "MODEL.DEVICE", _device,
+            "--opts", "MODEL.DEVICE", "cpu",
         ])
         pose_bgr = args.func(args, bgr_input)
     finally:
@@ -245,8 +245,7 @@ def run_tryon(
     human_np = np.array(human_img)
     pose_img = _get_densepose_image(human_np)
 
-    # --- Move models to device -----------------------------------------------
-    _openpose.preprocessor.body_estimation.model.to(_device)
+    # --- Move pipeline to GPU ---------------------------------------------------
     _pipe.to(_device)
     _pipe.unet_encoder.to(_device)
 

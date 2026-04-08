@@ -209,16 +209,17 @@ def auto_crop_person(
     x_min, y_min = kps_px.min(axis=0)
     x_max, y_max = kps_px.max(axis=0)
 
-    # Add margin
+    # Add margin — extra margin on top for head clearance
     bw = x_max - x_min
     bh = y_max - y_min
     mx = bw * margin
-    my = bh * margin
+    my_bottom = bh * margin
+    my_top = bh * (margin + 0.10)  # 10% extra on top for head
 
     x1 = max(0, x_min - mx)
-    y1 = max(0, y_min - my)
+    y1 = max(0, y_min - my_top)
     x2 = min(w_img, x_max + mx)
-    y2 = min(h_img, y_max + my)
+    y2 = min(h_img, y_max + my_bottom)
 
     # Adjust to target aspect ratio (expand the shorter dimension)
     crop_w = x2 - x1

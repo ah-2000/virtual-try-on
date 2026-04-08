@@ -8,6 +8,7 @@ import Header from "@/components/Header";
 import { motion } from "framer-motion";
 
 type FilterCategory = "all" | "tops" | "bottoms" | "one-pieces";
+type GenderFilter = "all" | "men" | "women";
 
 interface Garment {
   id: string;
@@ -15,6 +16,7 @@ interface Garment {
   price: string;
   image: string;
   category: string;
+  gender?: string;
 }
 
 // Fallback if backend is not running
@@ -24,6 +26,7 @@ const FALLBACK_GARMENTS: Garment[] = [
 export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterCategory>("all");
+  const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
   const [garments, setGarments] = useState<Garment[]>(FALLBACK_GARMENTS);
   // Fetch garments from backend; fall back to static list if unavailable
   useEffect(() => {
@@ -40,16 +43,24 @@ export default function Home() {
 
   const selectedGarment = garments.find(g => g.id === selectedId) || null;
 
-  const filters: { label: string; value: FilterCategory }[] = [
+  const genderFilters: { label: string; value: GenderFilter }[] = [
+    { label: "All", value: "all" },
+    { label: "Men", value: "men" },
+    { label: "Women", value: "women" },
+  ];
+
+  const categoryFilters: { label: string; value: FilterCategory }[] = [
     { label: "All", value: "all" },
     { label: "Tops", value: "tops" },
     { label: "Bottoms", value: "bottoms" },
     { label: "Dresses", value: "one-pieces" },
   ];
 
-  const filtered = activeFilter === "all"
-    ? garments
-    : garments.filter((g: Garment) => g.category === activeFilter);
+  const filtered = garments.filter((g: Garment) => {
+    const genderMatch = genderFilter === "all" || g.gender === genderFilter;
+    const categoryMatch = activeFilter === "all" || g.category === activeFilter;
+    return genderMatch && categoryMatch;
+  });
 
   return (
     <>
@@ -82,25 +93,46 @@ export default function Home() {
               <div className="w-12 h-1 bg-rose-400 mt-2" />
             </div>
 
-            {/* Category Filter */}
-            <div className="flex gap-2 p-1 rounded-full" style={{ background: "var(--surface-secondary)" }}>
-              {filters.map(f => (
-                <button
-                  key={f.value}
-                  onClick={() => setActiveFilter(f.value)}
-                  className={`px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${
-                    activeFilter === f.value
-                      ? "text-rose-500 shadow-sm"
-                      : "hover:opacity-80"
-                  }`}
-                  style={activeFilter === f.value
-                    ? { background: "var(--surface)" }
-                    : { color: "var(--text-tertiary)" }
-                  }
-                >
-                  {f.label}
-                </button>
-              ))}
+            {/* Gender + Category Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex gap-2 p-1 rounded-full" style={{ background: "var(--surface-secondary)" }}>
+                {genderFilters.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => setGenderFilter(f.value)}
+                    className={`px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${
+                      genderFilter === f.value
+                        ? "text-rose-500 shadow-sm"
+                        : "hover:opacity-80"
+                    }`}
+                    style={genderFilter === f.value
+                      ? { background: "var(--surface)" }
+                      : { color: "var(--text-tertiary)" }
+                    }
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 p-1 rounded-full" style={{ background: "var(--surface-secondary)" }}>
+                {categoryFilters.map(f => (
+                  <button
+                    key={f.value}
+                    onClick={() => setActiveFilter(f.value)}
+                    className={`px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${
+                      activeFilter === f.value
+                        ? "text-rose-500 shadow-sm"
+                        : "hover:opacity-80"
+                    }`}
+                    style={activeFilter === f.value
+                      ? { background: "var(--surface)" }
+                      : { color: "var(--text-tertiary)" }
+                    }
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-tertiary)" }}>

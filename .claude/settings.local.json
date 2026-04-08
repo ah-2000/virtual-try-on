@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -c \"import torch; print\\('torch:', torch.__version__\\)\")",
+      "Bash(.venv/Scripts/python -c \"import diffusers; print\\('diffusers:', diffusers.__version__\\)\")",
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(cp -f \"e:/Projects/virtual-try-on/backend/fashnvton/weights/IDM-VTON/humanparsing/parsing_atr.onnx\" \"e:/Projects/virtual-try-on/backend/idm_vton_local/ckpt/humanparsing/parsing_atr.onnx\")",
+      "Bash(cp -f \"e:/Projects/virtual-try-on/backend/fashnvton/weights/IDM-VTON/humanparsing/parsing_lip.onnx\" \"e:/Projects/virtual-try-on/backend/idm_vton_local/ckpt/humanparsing/parsing_lip.onnx\")",
+      "Bash(cp -f \"e:/Projects/virtual-try-on/backend/fashnvton/weights/IDM-VTON/openpose/ckpts/body_pose_model.pth\" \"e:/Projects/virtual-try-on/backend/idm_vton_local/ckpt/openpose/ckpts/body_pose_model.pth\")",
+      "Bash(cp -f \"e:/Projects/virtual-try-on/backend/fashnvton/weights/IDM-VTON/densepose/model_final_162be9.pkl\" \"e:/Projects/virtual-try-on/backend/idm_vton_local/ckpt/densepose/model_final_162be9.pkl\")",
+      "Bash(../.venv/Scripts/python -c ':*)",
+      "Bash(curl -L -o RealESRGAN_x4plus.pth \"https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth\")",
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(.venv/Scripts/python backend/main.py)",
+      "Bash(taskkill //F //PID 8956)",
+      "Bash(taskkill //F //PID 3892)",
+      "Bash(taskkill //F //PID 13748)",
+      "Bash(netstat -ano)"
+    ]
+  }
+}

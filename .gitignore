@@ -34,3 +34,6 @@ backend/data/Men/
 backend/data/Women/
 backend/detectron2_src/
 backend/idm_vton_local/
+backend/ootd_local/
+backend/fashn_vton15/
+backend/data/training/
